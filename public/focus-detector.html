@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>TM Image Model Checker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { --bg:#0b0f13; --fg:#e8eef4; --muted:#9fb3c8; --card:#121820; --accent:#4f86ff; }
+    body { margin:0; font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu; background:var(--bg); color:var(--fg); }
+    .wrap { max-width:1000px; margin:0 auto; padding:24px; }
+    h1 { font-size:20px; margin:0 0 16px; }
+    .card { background:var(--card); border:1px solid #1b2430; border-radius:10px; padding:16px; }
+    .row { display:flex; gap:16px; flex-wrap:wrap; }
+    .col { flex:1 1 320px; min-width:320px; }
+    .controls { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+    button { background:var(--accent); color:white; border:none; border-radius:8px; padding:8px 12px; cursor:pointer; }
+    button[disabled] { opacity:.6; cursor:not-allowed; }
+    .muted { color:var(--muted); font-size:12px; }
+    .media { display:flex; align-items:center; justify-content:center; background:#0e141c; border-radius:10px; min-height:260px; }
+    .media > * { max-width:100%; }
+    #predictions { margin-top:12px; }
+    .pred { display:flex; justify-content:space-between; padding:8px 10px; border:1px solid #1b2430; border-radius:8px; margin:6px 0; background:#0f1620; }
+    progress { width:160px; height:10px; }
+    .ok { color:#8de88d; }
+    .warn { color:#ffd479; }
+    .err { color:#ff8a8a; }
+    .small { font-size:13px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Teachable Machine Image Model Checker</h1>
+
+    <div class="row">
+      <div class="col card">
+        <div class="controls">
+          <button id="btnStart" disabled>Start webcam</button>
+          <button id="btnStop" disabled>Stop webcam</button>
+        </div>
+        <div id="media" class="media"></div>
+        <div class="muted small">Status: <span id="status" class="warn">Loading model...</span></div>
+      </div>
+
+      <div class="col card">
+        <div class="small muted">Predictions</div>
+        <div id="predictions"></div>
+        <div class="small muted">Classes: Focused, Distracted, Confused</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Use stable CDNs -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.4/dist/teachablemachine-image.min.js"></script>
+  <script>
+    const MODEL_URL = './model.json';
+    const METADATA_URL = './metadata.json';
+    const INPUT_SIZE = 224;
+    const INTERVAL_MS = 16.67; // 1 Hz predictions
+    
+    let model = null, webcam = null, running = false, timerId = null;
+
+    const el = (id) => document.getElementById(id);
+    const statusEl = el('status'), mediaEl = el('media'), predsEl = el('predictions');
+
+    function setStatus(t, cls='') { statusEl.className = cls; statusEl.textContent = t; }
+
+    async function renderPredictions(src) {
+      const preds = await model.predict(src);
+      preds.sort((a,b) => b.probability - a.probability);
+      predsEl.innerHTML = '';
+      for(const p of preds) {
+        const row = document.createElement('div'); 
+        row.className = 'pred';
+        const left = document.createElement('div'); 
+        left.textContent = p.className;
+        const right = document.createElement('div');
+        const prog = document.createElement('progress'); 
+        prog.max = 1; 
+        prog.value = p.probability;
+        const span = document.createElement('span'); 
+        span.style.marginLeft = '8px'; 
+        span.textContent = (p.probability * 100).toFixed(2) + '%';
+        right.appendChild(prog); 
+        right.appendChild(span);
+        row.appendChild(left); 
+        row.appendChild(right);
+        predsEl.appendChild(row);
+      }
+      setStatus('Running (1 Hz)', 'ok');
+    }
+
+    // Auto-load model on page load
+    window.addEventListener('load', async () => {
+      try {
+        setStatus('Loading model...', 'warn');
+        model = await tmImage.load(MODEL_URL, METADATA_URL);
+        el('btnStart').disabled = false;
+        setStatus('Model loaded', 'ok');
+      } catch (e) {
+        console.error(e);
+        setStatus('Failed to load model', 'err');
+      }
+    });
+
+    // Start webcam with 1 Hz predictions
+    el('btnStart').onclick = async () => {
+      if (!model) { setStatus('Model not loaded', 'warn'); return; }
+      try {
+        mediaEl.innerHTML = '';
+        setStatus('Starting webcam...', 'warn');
+        webcam = new tmImage.Webcam(INPUT_SIZE, INPUT_SIZE, true);
+        await webcam.setup({ facingMode: 'user' });
+        await webcam.play();
+        mediaEl.appendChild(webcam.canvas);
+        running = true;
+        el('btnStart').disabled = true;
+        el('btnStop').disabled = false;
+        setStatus('Webcam running (1 Hz)', 'ok');
+
+        // Clear any previous timer
+        if (timerId) clearInterval(timerId);
+
+        // Predict once per second
+        timerId = setInterval(async () => {
+          if (!running || !webcam) return;
+          webcam.update();
+          await renderPredictions(webcam.canvas);
+        }, INTERVAL_MS);
+      } catch (e) {
+        console.error(e);
+        setStatus('Webcam error', 'err');
+      }
+    };
+
+    // Stop webcam and timer
+    el('btnStop').onclick = async () => {
+      running = false;
+      if (timerId) { clearInterval(timerId); timerId = null; }
+      if (webcam) { await webcam.stop(); webcam = null; }
+      el('btnStart').disabled = false;
+      el('btnStop').disabled = true;
+      setStatus('Webcam stopped', 'warn');
+      predsEl.innerHTML = '';
+    };
+  </script>
+</body>
+</html>

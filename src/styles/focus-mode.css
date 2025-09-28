@@ -1,0 +1,48 @@
+.focus-mode-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.95);
+  z-index: 999999;
+  transform: translateZ(0);
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 2rem;
+}
+
+.focus-mode-overlay.active {
+  pointer-events: auto;
+}
+
+.screen-share-controls {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  background: #ff4444;
+  color: white;
+  padding: 10px;
+  border-radius: 5px;
+  z-index: 1000000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.focus-mode .screen-share-controls {
+  display: none !important;
+}
+
+.recording-dot {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}

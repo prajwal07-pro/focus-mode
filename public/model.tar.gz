@@ -1,0 +1,21 @@
+// Vosk-Browser setup
+import Vosk from 'vosk-browser';
+
+async function startSpeechRecognition() {
+  const model = await Vosk.createModel('model.tar.gz');
+  const recognizer = new model.KaldiRecognizer();
+
+  recognizer.on("result", (message) => {
+    // Parse recognized command
+    console.log('Command:', message.result.text);
+  });
+
+  const mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const audioContext = new window.AudioContext();
+  const recognizerNode = audioContext.createScriptProcessor(4096, 1, 1);
+  recognizerNode.onaudioprocess = (event) => {
+    recognizer.acceptWaveform(event.inputBuffer);
+  };
+  const source = audioContext.createMediaStreamSource(mediaStream);
+  source.connect(recognizerNode);
+}
